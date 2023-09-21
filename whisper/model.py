@@ -90,7 +90,7 @@ class MultiHeadAttention(nn.Module):
         wv, qk = self.qkv_attention(q, k, v, mask)
         return self.out(wv), qk
 
-    def qkv_attention(
+    def qkv_attention_old(
         self, q: Tensor, k: Tensor, v: Tensor, mask: Optional[Tensor] = None
     ):
         n_batch, n_ctx, n_state = q.shape
@@ -106,6 +106,23 @@ class MultiHeadAttention(nn.Module):
 
         w = F.softmax(qk, dim=-1).to(q.dtype)
         return (w @ v).permute(0, 2, 1, 3).flatten(start_dim=2), qk.detach()
+
+    def qkv_attention(
+        self, q: Tensor, k: Tensor, v: Tensor, mask: Optional[Tensor] = None
+    ):
+        n_batch, n_ctx, n_state = q.shape
+        q = q.view(*q.shape[:2], self.n_head, -1).permute(0, 2, 1, 3)
+        k = k.view(*k.shape[:2], self.n_head, -1).permute(0, 2, 1, 3)
+        v = v.view(*v.shape[:2], self.n_head, -1).permute(0, 2, 1, 3)
+        
+        if mask is not None:
+            mask = mask[:n_ctx,:n_ctx].to(q.dtype)
+        # modified for better performance under PyTorch 2.0
+        wv = F.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=0)
+
+        # previously we've returned q@k which we don't have now
+        # since it's not actually used anywhere else, let's just keep two return values for compatibility
+        return wv.permute(0, 2, 1, 3).flatten(start_dim=2), None
 
 
 class ResidualAttentionBlock(nn.Module):
