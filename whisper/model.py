@@ -87,7 +87,11 @@ class MultiHeadAttention(nn.Module):
             k = kv_cache[self.key]
             v = kv_cache[self.value]
 
-        wv, qk = self.qkv_attention(q, k, v, mask)
+        if self.training:
+            wv, qk = self.qkv_attention(q, k, v, mask)
+        else:
+            # FDPA complains about contiguous dimensions in inference
+            wv, qk = self.qkv_attention_old(q, k, v, mask)
         return self.out(wv), qk
 
     def qkv_attention_old(
